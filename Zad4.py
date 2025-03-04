@@ -2,3 +2,4 @@
 import cv2
 
 image_gray = cv2.imread("ascii.jpg", cv2.IMREAD_GRAYSCALE)
+cv.imwrite("ascii.jpg", "asciigray.jpg"	) 
