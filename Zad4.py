@@ -1,4 +1,4 @@
-'''4. Zamiana wartości piksela na czarny
+'''Zamiana wartości piksela na czarny
 a. Pobierz od użytkownika współrzędne (x, y).
 b. Stwórz walidację, która zweryfikuje czy podane współrzędne nie
 wychodzą poza wymiar zdjęcia.

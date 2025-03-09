@@ -1,4 +1,4 @@
-'''3. Znajdowanie środka obrazu
+'''Znajdowanie środka obrazu
 a. Wczytaj obraz i oblicz współrzędne jego środka.
 b. Pobierz wartość koloru piksela w tym miejscu i wyświetl ją w konsoli.'''
 

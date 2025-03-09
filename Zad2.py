@@ -1,4 +1,4 @@
-'''2. Modyfikacja pojedynczego piksela
+'''Modyfikacja pojedynczego piksela
 a. Zmień kolor piksela w prawym dolnym rogu obrazu na czerwony (0, 0, 255) .
 b. Wyświetl obraz przed i po zmianie.'''
 

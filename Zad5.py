@@ -1,4 +1,4 @@
-'''5. Kolorowanie fragmentu obrazu
+'''Kolorowanie fragmentu obrazu
 a. Podziel obraz na 4 równe części (ćwiartki).
 b. Wypełnij lewą górną ćwiartkę kolorem niebieskim (255, 0, 0) .
 c. Wyświetl obraz po zmianach.'''
