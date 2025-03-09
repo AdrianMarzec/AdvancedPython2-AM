@@ -1,2 +1,2 @@
-# ZAAWANSOWANE-PROGRAMOWANIE-W-J-ZYKU-PYTHON
+# AdvancedPython2-AM
 Zadania - Adrian Marzec
