@@ -16,5 +16,5 @@ cv2.circle(canvas, (h//2,w//2),60, red, -1)
 cv2.circle(canvas, (0,0), 40, blue, -1)
 
 
-cv2.imshow("Zadanie 2", canvas)
+cv2.imshow("Zadanie 3", canvas)
 cv2.waitKey(0)
