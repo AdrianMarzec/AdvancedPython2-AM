@@ -9,12 +9,6 @@ import imutils
 
 image = cv2.imread("wolf.jpg")
 
-(h, w) = image.shape[:2]
-(cX, cY) = (w // 2, h // 2)
-
-rotate = int(input("Podaj rotację "))
-
-M = cv2.getRotationMatrix2D((cX, cY), rotate, 1.0)
 rotated = imutils.rotate_bound(image, -33)
 cv2.imshow("Rotated by 180 Degrees", rotated)
 
