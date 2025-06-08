@@ -7,6 +7,36 @@ import os
 import numpy as np
 import re
 
+
+
+# Funkcja IoU (dodana)
+def iou(boxA, boxB):
+    # box: [xmin, ymin, xmax, ymax]
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+    iou_val = interArea / float(boxAArea + boxBArea - interArea) if (boxAArea + boxBArea - interArea) > 0 else 0
+    return iou_val
+
+def load_ground_truth_boxes(csv_path):
+    gt_boxes = {}
+    with open(csv_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            filename = row['filename']
+            xmin = float(row['xmin'])
+            ymin = float(row['ymin'])
+            xmax = float(row['xmax'])
+            ymax = float(row['ymax'])
+            if filename not in gt_boxes:
+                gt_boxes[filename] = []
+            gt_boxes[filename].append([xmin, ymin, xmax, ymax])
+    return gt_boxes
+
 # Wczytaj ground truth z CSV
 def load_ground_truth(csv_path):
     gt = {}
@@ -30,12 +60,12 @@ def detect_and_ocr(image_path):
 
     texts = []
     plate_idx = 0
+    detected_boxes = []
 
     for result in results:
         for box in result.boxes:
-            
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-
+            detected_boxes.append([x1, y1, x2, y2])
 
             plate_img = img[y1:y2, x1:x2]
 
@@ -44,29 +74,31 @@ def detect_and_ocr(image_path):
 
             preprocessed = preprocess_plate(plate_img)
 
-            '''highlighted_plate = highlight_main_characters(plate_img)
-            preprocessed = preprocess_plate(highlighted_plate)
-            
-            bright_mask = cv2.inRange(preprocessed, 200, 255)
-            isolated = cv2.bitwise_and(preprocessed, preprocessed, mask=bright_mask)
-            isolated = cv2.bitwise_not(isolated)'''
-
             height, width = preprocessed.shape[:2]
             left_margin = int(width * 0.1)
-            bottom_margin = int(height*0.05)
+            bottom_margin = int(height*0.07)
             cropped = preprocessed[bottom_margin:, left_margin:]
 
             debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
             cv2.imwrite(debug_path, cropped)
             plate_idx += 1
             
+            # Po wycięciu i wstępnym przetworzeniu tablicy
+            height, width = cropped.shape[:2]
+
+            # Zwiększenie rozmiaru 2x
+            #plate_resized = cv2.resize(cropped, (width*2, height*2), interpolation=cv2.INTER_CUBIC)
+
+
             ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
             if ocr_result:
                 text = ocr_result[0][1]
                 text = clean_text(text)
                 texts.append(text)
-    return texts
+
+    return texts, detected_boxes
+
 
 def clean_text(text):
     # Duże Litery
@@ -75,64 +107,12 @@ def clean_text(text):
     text = re.sub(r'[^A-Z0-9]', '', text)
     return text
 
-'''def highlight_main_characters(plate_img):
-    gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
-    
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    if np.mean(gray) > 127:
-        binary = 255 - binary
-
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    if not contours:
-        return plate_img  # nic nie znaleziono, zwróć oryginał
-    
-        # Lista bounding boxów znaków o sensownym rozmiarze
-    boxes = []
-    h_img, w_img = plate_img.shape[:2]
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        if h > 0.3 * h_img and w > 0.02 * w_img:  # pomijaj małe kropki/szumy
-            boxes.append((x, y, x + w, y + h))
-
-    if not boxes:
-        return plate_img  # nie znaleziono nic sensownego
-
-    # Oblicz zbiorczy bounding box
-    x1 = min(b[0] for b in boxes)
-    y1 = min(b[1] for b in boxes)
-    x2 = max(b[2] for b in boxes)
-    y2 = max(b[3] for b in boxes)
-
-    # Dodaj mały margines
-    margin = 5
-    x1 = max(x1 - margin, 0)
-    y1 = max(y1 - margin, 0)
-    x2 = min(x2 + margin, w_img)
-    y2 = min(y2 + margin, h_img)
-
-    cropped = plate_img[y1:y2, x1:x2]
-    # Konwersja do szarości
-    gray_crop = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
-    # Binaryzacja Otsu
-    _, binary_crop = cv2.threshold(gray_crop, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    
-
-    # Dylacja (pogrubienie)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    thickened = cv2.dilate(binary_crop, kernel, iterations=1)
-
-    # Konwersja do BGR, bo dalej prawdopodobnie potrzebujesz kolorowy obraz
-    thickened_bgr = cv2.cvtColor(thickened, cv2.COLOR_GRAY2BGR)
-
-    return thickened_bgr'''
-
 
 def preprocess_plate(plate_img):
+
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
+
     
     # Rozciąganie kontrastu (CLAHE)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
@@ -147,28 +127,10 @@ def preprocess_plate(plate_img):
 
 
     _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    '''binary = cv2.adaptiveThreshold(
-    blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    cv2.THRESH_BINARY, 11, 2)'''
-    median = cv2.medianBlur(binary, 3)
-    inverted = cv2.bitwise_not(median)
 
-    # Wyostrzanie
-    '''sharp_kernel = np.array([[0, -1, 0],
-                             [-1, 5, -1],
-                             [0, -1, 0]])
-    sharp = cv2.filter2D(gray, -1, sharp_kernel)'''
-    
-    
-    
-    # Dodatkowe wygładzanie do redukcji szumu (np. filtr medianowy)
-    #denoised = cv2.medianBlur(blurred, 3)  # kernel 3x3 - można eksperymentować
-
-    
-    
-    # Binaryzacja (Otsu)
-    #_, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    
+    #median = cv2.medianBlur(binary, 3)
+    bilateral = cv2.bilateralFilter(binary, 15, 100, 100)
+    inverted = cv2.bitwise_not(bilateral)
     
     return inverted
 
@@ -182,6 +144,7 @@ def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -
     grade = 2.0 + 3.0 * score
     return round(grade * 2) / 2
 
+
 # Ścieżka do pliku CSV
 csv_path = "annotations.csv"
 
@@ -193,24 +156,47 @@ images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
 correct_count = 0
 total = len(images)
 
+ground_truth_boxes = load_ground_truth_boxes(csv_path)
+
+ious_per_image = []
+
+
 start = time.time()
 
 for img_file in images:
     img_path = os.path.join(image_folder, img_file)
-    texts = detect_and_ocr(img_path)
+    texts, detected_boxes = detect_and_ocr(img_path)
     gt_text = ground_truth.get(img_file, "").upper()
-    ocr_text = texts[0].upper() if texts else ""
-    ocr_text = clean_text(ocr_text)
+    ocr_text_candidates = [clean_text(t) for t in texts]
+    ocr_text = ocr_text_candidates[0].upper() if texts else ""
+    #ocr_text = clean_text(ocr_text)
     gt_text = clean_text(gt_text)
+
+    # --- LICZENIE IoU ---
+    gt_boxes_img = ground_truth_boxes.get(img_file, [])
+    for gt_box in gt_boxes_img:
+        max_iou = 0
+        for det_box in detected_boxes:
+            current_iou = iou(gt_box, det_box)
+            if current_iou > max_iou:
+                max_iou = current_iou
+        ious_per_image.append(max_iou)
+    # --- --- --- --- ---
     
     if ocr_text == gt_text:
         correct_count += 1
     elif gt_text == ocr_text[1:] or gt_text==ocr_text[:-1] or gt_text==ocr_text[1:-1]:
         correct_count += 1
         ocr_text=gt_text
+    else:
+        for x in texts:
+            print(x)
+
         
-    
     print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
+
+average_iou = sum(ious_per_image) / len(ious_per_image) if ious_per_image else 0
+print(f"\nŚrednia wartość IoU dla detekcji: {average_iou:.3f}")
 
 end = time.time()
 processing_time_sec = end - start
