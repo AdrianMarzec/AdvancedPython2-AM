@@ -1,6 +1,8 @@
 import xml.etree.ElementTree as ET
 import csv
 import os
+import shutil
+import random
 
 def parse_annotations(xml_path, output_csv="annotations.csv", output_yolo_dir="yolo_labels", image_dir="images"):
     tree = ET.parse(xml_path)
@@ -34,7 +36,7 @@ def parse_annotations(xml_path, output_csv="annotations.csv", output_yolo_dir="y
 
                 writer.writerow([filename, xtl, ytl, xbr, ybr, plate_number])
 
-                # YOLO conversion: [class_id, x_center, y_center, width, height] (normalized)
+                # Konwersja do YOLO: [class_id, x_center, y_center, width, height] (normalizowane)
                 class_id = 0
                 x_center = ((xtl + xbr) / 2) / width
                 y_center = ((ytl + ybr) / 2) / height
@@ -47,8 +49,38 @@ def parse_annotations(xml_path, output_csv="annotations.csv", output_yolo_dir="y
                 with open(os.path.join(output_yolo_dir, f"{base_filename}.txt"), "w") as yolo_file:
                     yolo_file.write(yolo_line)
 
-    print(f"Zapisano dane do: {output_csv} i {output_yolo_dir}/")
+    print(f"Zapisano dane do: {output_csv} i {output_yolo_dir}")
 
-# Przykładowe wywołanie
+
+
+def split_yolo_dataset(image_dir='photos', label_dir='yolo_labels', output_dir='dataset', train_ratio=0.7):
+    # Lista plików JPG
+    image_files = [f for f in os.listdir(image_dir) if f.lower().endswith(".jpg")]
+    random.seed(42)
+    random.shuffle(image_files)
+
+    train_count = int(len(image_files) * train_ratio)
+    train_files = image_files[:train_count]
+    val_files = image_files[train_count:]
+
+    for split, files in [('train', train_files), ('val', val_files)]:
+        img_out = os.path.join(output_dir, 'images', split)
+        lbl_out = os.path.join(output_dir, 'labels', split)
+        os.makedirs(img_out, exist_ok=True)
+        os.makedirs(lbl_out, exist_ok=True)
+
+        for file in files:
+            base = os.path.splitext(file)[0]
+            # Kopiuj obraz
+            shutil.copy(os.path.join(image_dir, file), os.path.join(img_out, file))
+            # Kopiuj etykietę YOLO
+            label_path = os.path.join(label_dir, f"{base}.txt")
+            if os.path.exists(label_path):
+                shutil.copy(label_path, os.path.join(lbl_out, f"{base}.txt"))
+
+    print("Podział na train/val zakończony.")
+
+
 if __name__ == "__main__":
     parse_annotations("annotations.xml")
+    split_yolo_dataset()
