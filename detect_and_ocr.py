@@ -90,12 +90,15 @@ def detect_and_ocr(image_path):
             #plate_resized = cv2.resize(cropped, (width*2, height*2), interpolation=cv2.INTER_CUBIC)
 
 
-            ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+            #ROZSZERZENIE WIĘKSZE ALE TYLKO GDY KONIECZNE - FAIL!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            plate_resized = cv2.resize(cropped, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+
+            ocr_result = reader.readtext(plate_resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
             if ocr_result:
-                text = ocr_result[0][1]
-                text = clean_text(text)
-                texts.append(text)
+                for res in ocr_result:
+                    text = clean_text(res[1])
+                    texts.append(text)
 
     return texts, detected_boxes
 
@@ -124,6 +127,8 @@ def preprocess_plate(plate_img):
     # Usuwanie szumu (morfologia)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
     clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
+    #kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
+    #clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel2)
 
 
     _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -135,13 +140,28 @@ def preprocess_plate(plate_img):
     return inverted
 
 
+'''
+import difflib
+
+def similar(a, b):
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+if ocr_text == gt_text or similar(ocr_text, gt_text) > 0.85:
+    correct_count += 1'''
+
+
 def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
+    # Check minimum requirements
     if accuracy_percent < 60 or processing_time_sec > 60:
         return 2.0
+    # Normalize accuracy: 60% → 0.0, 100% → 1.0
     accuracy_norm = (accuracy_percent - 60) / 40
+    # Normalize time: 60s → 0.0, 10s → 1.0
     time_norm = (60 - processing_time_sec) / 50
+    # Compute weighted score
     score = 0.7 * accuracy_norm + 0.3 * time_norm
     grade = 2.0 + 3.0 * score
+    # Round to the nearest 0.5
     return round(grade * 2) / 2
 
 
@@ -183,14 +203,24 @@ for img_file in images:
         ious_per_image.append(max_iou)
     # --- --- --- --- ---
     
-    if ocr_text == gt_text:
-        correct_count += 1
-    elif gt_text == ocr_text[1:] or gt_text==ocr_text[:-1] or gt_text==ocr_text[1:-1]:
-        correct_count += 1
-        ocr_text=gt_text
-    else:
-        for x in texts:
-            print(x)
+    match_found = False
+    for candidate in texts:
+        candidate_clean = clean_text(candidate)
+        if candidate_clean == gt_text or \
+        candidate_clean[1:] == gt_text or \
+        candidate_clean[:-1] == gt_text or \
+        candidate_clean[1:-1] == gt_text:
+            correct_count += 1
+            match_found = True
+            ocr_text = candidate_clean  # do wypisania
+            break
+        
+        #else spróbuj na większym (resize)!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!???????????????
+
+    if not match_found:
+        for t in texts:
+            print(t)
+        ocr_text = clean_text(texts[0]) if texts else ""
 
         
     print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
