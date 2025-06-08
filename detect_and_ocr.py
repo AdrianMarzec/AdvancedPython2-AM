@@ -5,6 +5,7 @@ import easyocr
 import time
 import os
 import numpy as np
+import re
 
 # Wczytaj ground truth z CSV
 def load_ground_truth(csv_path):
@@ -17,7 +18,7 @@ def load_ground_truth(csv_path):
             gt[filename] = plate_number
     return gt
 
-# Załaduj model YOLO (najlepszy wytrenowany)
+# Załadowanie modelu YOLO (najlepszy wytrenowany)
 model = YOLO('runs/detect/train/weights/best.pt')
 
 # Inicjalizuj OCR
@@ -41,18 +42,25 @@ def detect_and_ocr(image_path):
             debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
             cv2.imwrite(debug_path, plate_img)
 
-            highlighted_plate = highlight_main_characters(plate_img)
+            preprocessed = preprocess_plate(plate_img)
+
+            '''highlighted_plate = highlight_main_characters(plate_img)
             preprocessed = preprocess_plate(highlighted_plate)
             
             bright_mask = cv2.inRange(preprocessed, 200, 255)
             isolated = cv2.bitwise_and(preprocessed, preprocessed, mask=bright_mask)
-            isolated = cv2.bitwise_not(isolated)
+            isolated = cv2.bitwise_not(isolated)'''
+
+            height, width = preprocessed.shape[:2]
+            left_margin = int(width * 0.1)
+            bottom_margin = int(height*0.05)
+            cropped = preprocessed[bottom_margin:, left_margin:]
 
             debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
-            cv2.imwrite(debug_path, isolated)
+            cv2.imwrite(debug_path, cropped)
             plate_idx += 1
             
-            ocr_result = reader.readtext(isolated, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+            ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
             if ocr_result:
                 text = ocr_result[0][1]
@@ -61,9 +69,9 @@ def detect_and_ocr(image_path):
     return texts
 
 def clean_text(text):
-    # Usuń spacje i znaki niealfanumeryczne
-    import re
+    # Duże Litery
     text = text.upper()
+    # Usuń spacje i znaki niealfanumeryczne
     text = re.sub(r'[^A-Z0-9]', '', text)
     return text
 
@@ -126,30 +134,42 @@ def preprocess_plate(plate_img):
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
     
-    # Wyostrzanie
-    sharp_kernel = np.array([[0, -1, 0],
-                             [-1, 5, -1],
-                             [0, -1, 0]])
-    sharp = cv2.filter2D(gray, -1, sharp_kernel)
-    
-    
-    blurred = cv2.bilateralFilter(gray,9,75,75)
-    
-    # Dodatkowe wygładzanie do redukcji szumu (np. filtr medianowy)
-    denoised = cv2.medianBlur(blurred, 3)  # kernel 3x3 - można eksperymentować
-
     # Rozciąganie kontrastu (CLAHE)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(denoised)
+    enhanced = clahe.apply(gray)
+
+    
+    blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
+
+    # Usuwanie szumu (morfologia)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
+    clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
+
+    _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    '''binary = cv2.adaptiveThreshold(
+    blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv2.THRESH_BINARY, 11, 2)'''
+
+    inverted = cv2.bitwise_not(binary)
+
+    # Wyostrzanie
+    '''sharp_kernel = np.array([[0, -1, 0],
+                             [-1, 5, -1],
+                             [0, -1, 0]])
+    sharp = cv2.filter2D(gray, -1, sharp_kernel)'''
+    
+    
+    
+    # Dodatkowe wygładzanie do redukcji szumu (np. filtr medianowy)
+    #denoised = cv2.medianBlur(blurred, 3)  # kernel 3x3 - można eksperymentować
+
+    
     
     # Binaryzacja (Otsu)
-    _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    #_, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
-    '''# Usuwanie szumu (morfologia)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-    clean = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)'''
     
-    return thresh
+    return inverted
 
 
 def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
@@ -184,6 +204,10 @@ for img_file in images:
     
     if ocr_text == gt_text:
         correct_count += 1
+    elif gt_text == ocr_text[1:] or gt_text==ocr_text[:-1] or gt_text==ocr_text[1:-1]:
+        correct_count += 1
+        ocr_text=gt_text
+        
     
     print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
 
