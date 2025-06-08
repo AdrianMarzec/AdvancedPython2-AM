@@ -75,7 +75,7 @@ def clean_text(text):
     text = re.sub(r'[^A-Z0-9]', '', text)
     return text
 
-def highlight_main_characters(plate_img):
+'''def highlight_main_characters(plate_img):
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
     
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -127,7 +127,7 @@ def highlight_main_characters(plate_img):
     # Konwersja do BGR, bo dalej prawdopodobnie potrzebujesz kolorowy obraz
     thickened_bgr = cv2.cvtColor(thickened, cv2.COLOR_GRAY2BGR)
 
-    return thickened_bgr
+    return thickened_bgr'''
 
 
 def preprocess_plate(plate_img):
@@ -145,12 +145,13 @@ def preprocess_plate(plate_img):
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
     clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
 
+
     _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     '''binary = cv2.adaptiveThreshold(
     blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
     cv2.THRESH_BINARY, 11, 2)'''
-
-    inverted = cv2.bitwise_not(binary)
+    median = cv2.medianBlur(binary, 3)
+    inverted = cv2.bitwise_not(median)
 
     # Wyostrzanie
     '''sharp_kernel = np.array([[0, -1, 0],
