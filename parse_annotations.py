@@ -84,3 +84,7 @@ def split_yolo_dataset(image_dir='photos', label_dir='yolo_labels', output_dir='
 if __name__ == "__main__":
     parse_annotations("annotations.xml")
     split_yolo_dataset()
+    #pip install ultralytics
+    #yolo task=detect mode=train model=yolov8n.pt data=license_plate.yaml epochs=30 imgsz=640
+    #yolo task=detect mode=predict model=runs/detect/train/weights/best.pt source=dataset/images/val
+    #yolo val model=runs/detect/train/weights/best.pt data=license_plate.yaml imgsz=640
