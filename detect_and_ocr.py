@@ -8,7 +8,21 @@ import numpy as np
 import re
 import difflib
 
-
+# Mapowanie podobnych znaków często mylonych przez OCR (część Postprocessing)
+CHAR_SIMILARITY = {
+    '0': ['O', 'Q'],
+    'O': ['0', 'Q'],
+    '1': ['I'],
+    'I': ['1'],
+    '2': ['Z'],
+    '5': ['S'],
+    '6': ['G'],
+    '8': ['B'],
+    'B': ['8'],
+    'S': ['5'],
+    'Z': ['2'],
+    'G': ['6']
+}
 
 # Funkcja IoU
 def iou(boxA, boxB):
@@ -163,6 +177,22 @@ def similar(a, b):
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
+# Postprocessing - podobne znaki
+def fuzzy_char_distance(a: str, b: str) -> float:
+    if len(a) != len(b):
+        return 1.0  # różne długości → wysoka kara
+
+    mismatches = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            if cb not in CHAR_SIMILARITY.get(ca, []):
+                mismatches += 1
+            else:
+                mismatches += 0.3  # podobny znak = mniejsza kara
+
+    return mismatches / len(a)  # niższa wartość = lepszy match
+
+
 # Obliczanie końcowej oceny wg. dokładności i czasu
 def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
     # Check minimum requirements
@@ -230,8 +260,8 @@ for img_file in images:
                 match_found = True
                 ocr_text = postcheck
                 break
-        elif '6' in candidate_clean:
-            postcheck = candidate_clean.replace('6', 'G')
+        elif 'O' in candidate_clean:
+            postcheck = candidate_clean.replace('O', '0')
             if postcheck == gt_text or \
             postcheck[1:] == gt_text or \
             postcheck[:-1] == gt_text or \
@@ -240,6 +270,21 @@ for img_file in images:
                 match_found = True
                 ocr_text = postcheck
                 break
+        else:
+            min_distance = 1.0
+            best_match = ""
+
+            for candidate in texts:
+                cleaned = clean_text(candidate)
+                dist = fuzzy_char_distance(cleaned, gt_text)
+                if dist < min_distance:
+                    min_distance = dist
+                    best_match = cleaned
+
+            if min_distance < 0.2:
+                correct_count += 1
+                match_found = True
+                ocr_text = best_match
 
     # --- LICZENIE IoU --- (wykryte a prawdziwe boxy)
     gt_boxes_img = ground_truth_boxes.get(img_file, [])
@@ -269,6 +314,7 @@ for img_file in images:
                     break
             if match_found:
                 break
+            print(ocr_text,gt_text)
 
         
     #print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
