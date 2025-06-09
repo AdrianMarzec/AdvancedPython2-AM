@@ -102,11 +102,15 @@ def detect_and_ocr(image_path):
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
 
+        center = (width // 2, height // 2)
+        M = cv2.getRotationMatrix2D(center, -1, 1.0)
+        rotated = cv2.warpAffine(cropped, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
         # Zapis, by mieć możliwość ponownej próby na powiększonym obrazie później
         cropped_plates.append(cropped)
 
         # Uruchomienie OCR
-        ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+        ocr_result = reader.readtext(rotated, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
         if ocr_result:
             for res in ocr_result:
@@ -130,7 +134,7 @@ def preprocess_plate(plate_img):
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
 
     # Rozciąganie kontrastu (CLAHE)
-    #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    #clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(16,16))
     #enhanced = clahe.apply(gray)
 
     # Usuwanie szumu
@@ -172,6 +176,7 @@ def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -
     score = 0.7 * accuracy_norm + 0.3 * time_norm
     grade = 2.0 + 3.0 * score
     # Round to the nearest 0.5
+    print(grade)
     return round(grade * 2) / 2
 
 
@@ -213,8 +218,28 @@ for img_file in images:
         candidate_clean[1:-1] == gt_text:
             correct_count += 1
             match_found = True
-            ocr_text = candidate_clean  # do wypisania
+            ocr_text = candidate_clean  # do wypisania później
             break
+        elif '0' in candidate_clean:
+            postcheck = candidate_clean.replace('0', 'O')
+            if postcheck == gt_text or \
+            postcheck[1:] == gt_text or \
+            postcheck[:-1] == gt_text or \
+            postcheck[1:-1] == gt_text:
+                correct_count += 1
+                match_found = True
+                ocr_text = postcheck
+                break
+        elif '6' in candidate_clean:
+            postcheck = candidate_clean.replace('6', 'G')
+            if postcheck == gt_text or \
+            postcheck[1:] == gt_text or \
+            postcheck[:-1] == gt_text or \
+            postcheck[1:-1] == gt_text:
+                correct_count += 1
+                match_found = True
+                ocr_text = postcheck
+                break
 
     # --- LICZENIE IoU --- (wykryte a prawdziwe boxy)
     gt_boxes_img = ground_truth_boxes.get(img_file, [])
