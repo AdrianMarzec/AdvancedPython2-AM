@@ -117,11 +117,11 @@ def preprocess_plate(plate_img):
 
     
     # Rozciąganie kontrastu (CLAHE)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gray)
+    #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    #enhanced = clahe.apply(gray)
 
     #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
-    blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
+    blurred = cv2.bilateralFilter(gray,9,9,1.5)
 
     # Usuwanie szumu (morfologia)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
