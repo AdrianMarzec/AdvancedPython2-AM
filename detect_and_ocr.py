@@ -17,12 +17,14 @@ def iou(boxA, boxB):
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
     yB = min(boxA[3], boxB[3])
-    interArea = max(0, xB - xA) * max(0, yB - yA)
+    interArea = max(0, xB - xA) * max(0, yB - yA) # Obszar wspólny
     boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
     boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
     iou_val = interArea / float(boxAArea + boxBArea - interArea) if (boxAArea + boxBArea - interArea) > 0 else 0
     return iou_val
 
+
+# Wczytanie boxów prawdziwych
 def load_ground_truth_boxes(csv_path):
     gt_boxes = {}
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
@@ -38,7 +40,7 @@ def load_ground_truth_boxes(csv_path):
             gt_boxes[filename].append([xmin, ymin, xmax, ymax])
     return gt_boxes
 
-# Wczytaj ground truth z CSV
+# Wczytanie numerów prawdziwych
 def load_ground_truth(csv_path):
     gt = {}
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
@@ -55,6 +57,7 @@ model = YOLO('runs/detect/train/weights/best.pt')
 # Inicjalizuj OCR
 reader = easyocr.Reader(['en'])
 
+# Wykrywanie tablic i rozpoznanie znaków z obrazu
 def detect_and_ocr(image_path):
     img = cv2.imread(image_path)
     #results = model(img)
@@ -65,24 +68,33 @@ def detect_and_ocr(image_path):
     detected_boxes = []
     cropped_plates = []
 
+    # Dwie pętle gdy jest więcej niż jedna tablica na jpg 
     #for result in results:
     #   for box in result.boxes:
     for box in result.boxes:
+        # Współrzędne wykrytej tablicy
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         detected_boxes.append([x1, y1, x2, y2])
 
+        # Wycięcie tablicy z obrazu
         plate_img = img[y1:y2, x1:x2]
 
+        # Zapis wyciętej tablicy do Debugowania
         '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
         cv2.imwrite(debug_path, plate_img)'''
 
+        # Wstępne przetwarzanie obrazu tablicy
         preprocessed = preprocess_plate(plate_img)
 
+
+        # Dodatkowe przycięcie marginesów
         height, width = preprocessed.shape[:2]
         left_margin = int(width * 0.1)
         bottom_margin = int(height*0.07)
         cropped = preprocessed[bottom_margin:, left_margin:]
 
+
+        # Zapis przetworzonej tablicy do Debugowania
         '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
         cv2.imwrite(debug_path, cropped)
         plate_idx += 1'''
@@ -90,8 +102,10 @@ def detect_and_ocr(image_path):
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
 
+        # Zapis, by mieć możliwość ponownej próby na powiększonym obrazie później
         cropped_plates.append(cropped)
 
+        # Uruchomienie OCR
         ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
         if ocr_result:
@@ -99,7 +113,7 @@ def detect_and_ocr(image_path):
                 text = clean_text(res[1])
                 texts.append(text)
 
-    return texts, detected_boxes,cropped_plates
+    return texts, detected_boxes, cropped_plates
 
 
 def clean_text(text):
@@ -110,28 +124,29 @@ def clean_text(text):
     return text
 
 
+# Wstępne przetwarzanie obrazu tablicy dla lepszego OCR
 def preprocess_plate(plate_img):
-
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
 
-    
     # Rozciąganie kontrastu (CLAHE)
     #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     #enhanced = clahe.apply(gray)
 
+    # Usuwanie szumu
     #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
     blurred = cv2.bilateralFilter(gray,9,9,1.5)
 
-    # Usuwanie szumu (morfologia)
+    # Usuwanie szumu (morfologia, oczyszczenie)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
     clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
     #kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
     #clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel2)
 
-
+    # Progowanie Otsu
     _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
+    # Filtracja i odwrócenie
     #median = cv2.medianBlur(binary, 3)
     bilateral = cv2.bilateralFilter(binary, 15, 100, 100)
     inverted = cv2.bitwise_not(bilateral)
@@ -139,12 +154,12 @@ def preprocess_plate(plate_img):
     return inverted
 
 
-
+# Obliczanie podobieństwa tekstów
 def similar(a, b):
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-
+# Obliczanie końcowej oceny wg. dokładności i czasu
 def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
     # Check minimum requirements
     if accuracy_percent < 60 or processing_time_sec > 60:
@@ -163,6 +178,7 @@ def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -
 # Ścieżka do pliku CSV
 csv_path = "annotations.csv"
 
+# Oczekiwane numery tablic
 ground_truth = load_ground_truth(csv_path)
 
 image_folder = "testowe100"
@@ -171,13 +187,15 @@ images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
 correct_count = 0
 total = len(images)
 
+# Oczekiwane boxy tablic
 ground_truth_boxes = load_ground_truth_boxes(csv_path)
 
 ious_per_image = []
 
-
+# Rozpoczęcie faktycznego algorytmu detekcji i OCR
 start = time.time()
 
+# Przetwarzanie każdego obrazu
 for img_file in images:
     img_path = os.path.join(image_folder, img_file)
     texts, detected_boxes, cropped_plates = detect_and_ocr(img_path)
@@ -188,6 +206,8 @@ for img_file in images:
     gt_text = clean_text(gt_text)
     
     match_found = False
+
+    # Porównanie OCR z GT (trochę Postprocessing np. ramka jako 'I' czytane)
     for candidate in texts:
         candidate_clean = clean_text(candidate)
         if candidate_clean == gt_text or \
@@ -199,7 +219,7 @@ for img_file in images:
             ocr_text = candidate_clean  # do wypisania
             break
 
-    # --- LICZENIE IoU ---
+    # --- LICZENIE IoU --- (wykryte a prawdziwe boxy)
     gt_boxes_img = ground_truth_boxes.get(img_file, [])
     for gt_box in gt_boxes_img:
         max_iou = 0
@@ -210,6 +230,7 @@ for img_file in images:
         ious_per_image.append(max_iou)
     # --- --- --- --- ---
 
+    # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
     if not match_found and similar(ocr_text, gt_text) > 0.85:
         for plate_img in cropped_plates:
             resized = cv2.resize(plate_img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
