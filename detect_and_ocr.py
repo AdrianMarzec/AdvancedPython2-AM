@@ -9,7 +9,7 @@ import re
 
 
 
-# Funkcja IoU (dodana)
+# Funkcja IoU
 def iou(boxA, boxB):
     # box: [xmin, ymin, xmax, ymax]
     xA = max(boxA[0], boxB[0])
@@ -61,6 +61,7 @@ def detect_and_ocr(image_path):
     texts = []
     plate_idx = 0
     detected_boxes = []
+    cropped_plates = []
 
     for result in results:
         for box in result.boxes:
@@ -69,8 +70,8 @@ def detect_and_ocr(image_path):
 
             plate_img = img[y1:y2, x1:x2]
 
-            debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-            cv2.imwrite(debug_path, plate_img)
+            '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+            cv2.imwrite(debug_path, plate_img)'''
 
             preprocessed = preprocess_plate(plate_img)
 
@@ -79,28 +80,23 @@ def detect_and_ocr(image_path):
             bottom_margin = int(height*0.07)
             cropped = preprocessed[bottom_margin:, left_margin:]
 
-            debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+            '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
             cv2.imwrite(debug_path, cropped)
-            plate_idx += 1
+            plate_idx += 1'''
             
             # Po wycięciu i wstępnym przetworzeniu tablicy
             height, width = cropped.shape[:2]
 
-            # Zwiększenie rozmiaru 2x
-            #plate_resized = cv2.resize(cropped, (width*2, height*2), interpolation=cv2.INTER_CUBIC)
+            cropped_plates.append(cropped)
 
-
-            #ROZSZERZENIE WIĘKSZE ALE TYLKO GDY KONIECZNE - FAIL!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            plate_resized = cv2.resize(cropped, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
-
-            ocr_result = reader.readtext(plate_resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+            ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
             if ocr_result:
                 for res in ocr_result:
                     text = clean_text(res[1])
                     texts.append(text)
 
-    return texts, detected_boxes
+    return texts, detected_boxes,cropped_plates
 
 
 def clean_text(text):
@@ -121,7 +117,7 @@ def preprocess_plate(plate_img):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     enhanced = clahe.apply(gray)
 
-    
+    #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
     blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
 
     # Usuwanie szumu (morfologia)
@@ -185,23 +181,12 @@ start = time.time()
 
 for img_file in images:
     img_path = os.path.join(image_folder, img_file)
-    texts, detected_boxes = detect_and_ocr(img_path)
+    texts, detected_boxes, cropped_plates = detect_and_ocr(img_path)
     gt_text = ground_truth.get(img_file, "").upper()
     ocr_text_candidates = [clean_text(t) for t in texts]
     ocr_text = ocr_text_candidates[0].upper() if texts else ""
     #ocr_text = clean_text(ocr_text)
     gt_text = clean_text(gt_text)
-
-    # --- LICZENIE IoU ---
-    gt_boxes_img = ground_truth_boxes.get(img_file, [])
-    for gt_box in gt_boxes_img:
-        max_iou = 0
-        for det_box in detected_boxes:
-            current_iou = iou(gt_box, det_box)
-            if current_iou > max_iou:
-                max_iou = current_iou
-        ious_per_image.append(max_iou)
-    # --- --- --- --- ---
     
     match_found = False
     for candidate in texts:
@@ -214,21 +199,44 @@ for img_file in images:
             match_found = True
             ocr_text = candidate_clean  # do wypisania
             break
-        
-        #else spróbuj na większym (resize)!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!???????????????
+
+    # --- LICZENIE IoU ---
+    gt_boxes_img = ground_truth_boxes.get(img_file, [])
+    for gt_box in gt_boxes_img:
+        max_iou = 0
+        for det_box in detected_boxes:
+            current_iou = iou(gt_box, det_box)
+            if current_iou > max_iou:
+                max_iou = current_iou
+        ious_per_image.append(max_iou)
+    # --- --- --- --- ---
 
     if not match_found:
-        for t in texts:
-            print(t)
-        ocr_text = clean_text(texts[0]) if texts else ""
+        for plate_img in cropped_plates:
+            resized = cv2.resize(plate_img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
+            for res in ocr_result:
+                text_resized = clean_text(res[1])
+                if text_resized == gt_text or \
+                   text_resized[1:] == gt_text or \
+                   text_resized[:-1] == gt_text or \
+                   text_resized[1:-1] == gt_text:
+                    correct_count += 1
+                    match_found = True
+                    ocr_text = text_resized
+                    break
+            if match_found:
+                break
 
         
     print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
 
+
+end = time.time()
+
 average_iou = sum(ious_per_image) / len(ious_per_image) if ious_per_image else 0
 print(f"\nŚrednia wartość IoU dla detekcji: {average_iou:.3f}")
 
-end = time.time()
 processing_time_sec = end - start
 
 accuracy_percent = (correct_count / total) * 100
