@@ -6,6 +6,7 @@ import time
 import os
 import numpy as np
 import re
+import difflib
 
 
 
@@ -56,45 +57,47 @@ reader = easyocr.Reader(['en'])
 
 def detect_and_ocr(image_path):
     img = cv2.imread(image_path)
-    results = model(img)
+    #results = model(img)
+    result = model(img)[0]
 
     texts = []
     plate_idx = 0
     detected_boxes = []
     cropped_plates = []
 
-    for result in results:
-        for box in result.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            detected_boxes.append([x1, y1, x2, y2])
+    #for result in results:
+    #   for box in result.boxes:
+    for box in result.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        detected_boxes.append([x1, y1, x2, y2])
 
-            plate_img = img[y1:y2, x1:x2]
+        plate_img = img[y1:y2, x1:x2]
 
-            '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-            cv2.imwrite(debug_path, plate_img)'''
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+        cv2.imwrite(debug_path, plate_img)'''
 
-            preprocessed = preprocess_plate(plate_img)
+        preprocessed = preprocess_plate(plate_img)
 
-            height, width = preprocessed.shape[:2]
-            left_margin = int(width * 0.1)
-            bottom_margin = int(height*0.07)
-            cropped = preprocessed[bottom_margin:, left_margin:]
+        height, width = preprocessed.shape[:2]
+        left_margin = int(width * 0.1)
+        bottom_margin = int(height*0.07)
+        cropped = preprocessed[bottom_margin:, left_margin:]
 
-            '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
-            cv2.imwrite(debug_path, cropped)
-            plate_idx += 1'''
-            
-            # Po wycięciu i wstępnym przetworzeniu tablicy
-            height, width = cropped.shape[:2]
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        cv2.imwrite(debug_path, cropped)
+        plate_idx += 1'''
+        
+        # Po wycięciu i wstępnym przetworzeniu tablicy
+        height, width = cropped.shape[:2]
 
-            cropped_plates.append(cropped)
+        cropped_plates.append(cropped)
 
-            ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+        ocr_result = reader.readtext(cropped, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
 
-            if ocr_result:
-                for res in ocr_result:
-                    text = clean_text(res[1])
-                    texts.append(text)
+        if ocr_result:
+            for res in ocr_result:
+                text = clean_text(res[1])
+                texts.append(text)
 
     return texts, detected_boxes,cropped_plates
 
@@ -136,14 +139,10 @@ def preprocess_plate(plate_img):
     return inverted
 
 
-'''
-import difflib
 
 def similar(a, b):
     return difflib.SequenceMatcher(None, a, b).ratio()
 
-if ocr_text == gt_text or similar(ocr_text, gt_text) > 0.85:
-    correct_count += 1'''
 
 
 def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
@@ -211,7 +210,7 @@ for img_file in images:
         ious_per_image.append(max_iou)
     # --- --- --- --- ---
 
-    if not match_found:
+    if not match_found and similar(ocr_text, gt_text) > 0.85:
         for plate_img in cropped_plates:
             resized = cv2.resize(plate_img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
             ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
@@ -229,7 +228,7 @@ for img_file in images:
                 break
 
         
-    print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
+    #print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
 
 
 end = time.time()
