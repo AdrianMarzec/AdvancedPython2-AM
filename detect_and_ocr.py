@@ -200,16 +200,13 @@ for img_file in images:
     img_path = os.path.join(image_folder, img_file)
     texts, detected_boxes, cropped_plates = detect_and_ocr(img_path)
     gt_text = ground_truth.get(img_file, "").upper()
-    ocr_text_candidates = [clean_text(t) for t in texts]
-    ocr_text = ocr_text_candidates[0].upper() if texts else ""
-    #ocr_text = clean_text(ocr_text)
+    ocr_text = texts[0].upper() if texts else ""
     gt_text = clean_text(gt_text)
     
     match_found = False
 
     # Porównanie OCR z GT (trochę Postprocessing np. ramka jako 'I' czytane)
-    for candidate in texts:
-        candidate_clean = clean_text(candidate)
+    for candidate_clean in texts:
         if candidate_clean == gt_text or \
         candidate_clean[1:] == gt_text or \
         candidate_clean[:-1] == gt_text or \
