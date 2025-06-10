@@ -154,8 +154,8 @@ def preprocess_plate(plate_img):
     blurred = cv2.bilateralFilter(gray,9,9,1.5)
 
     # Usuwanie szumu (morfologia, oczyszczenie)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-    clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
+    clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
     #kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
     #clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel2)
 
@@ -164,7 +164,7 @@ def preprocess_plate(plate_img):
 
     # Filtracja i odwrócenie
     #median = cv2.medianBlur(binary, 3)
-    bilateral = cv2.bilateralFilter(binary, 15, 100, 100)
+    bilateral = cv2.bilateralFilter(binary, 15, 100, 125)
     inverted = cv2.bitwise_not(bilateral)
     
     return inverted
@@ -217,13 +217,18 @@ ground_truth = load_ground_truth(csv_path)
 #image_folder = "testowe100"
 image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
-random.seed(2137) 
+random.seed(4748) 
 #42 - 67%
+#1410 - 68%
+#966 - 69%
+#4748 - 75%
+#3068191 - 74%
 #2137 - 73%
 #139 - 66%
 #11 - 72%
 #13 - 71%
 #47 - 70%
+#25633 - 70%
 #0 - 71%
 #3 - 71%
 #666 - 67%
@@ -315,8 +320,15 @@ for img_file in images:
     # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
     if not match_found and similar(ocr_text, gt_text) > 0.85:
         for plate_img in cropped_plates:
-            resized = cv2.resize(plate_img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
-            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
+            # Po wycięciu i wstępnym przetworzeniu tablicy
+            height, width = plate_img.shape[:2]
+
+            '''center = (width // 2, height // 2)
+            M = cv2.getRotationMatrix2D(center, 2, 1.0)
+            rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            resized = cv2.resize(rotated, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)'''
+
+            ocr_result = reader.readtext(plate_img, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
             for res in ocr_result:
                 text_resized = clean_text(res[1])
                 if text_resized == gt_text or \
