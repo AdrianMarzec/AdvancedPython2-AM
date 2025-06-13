@@ -65,15 +65,17 @@ def load_ground_truth(csv_path):
 
 # Załadowanie modelu YOLO (najlepszy wytrenowany)
 model = YOLO('runs/detect/train/weights/best.pt')
+model.to('cuda')  # Przenosi model na GPU
+
 
 # Inicjalizuj OCR
-reader = easyocr.Reader(['en'])
+reader = easyocr.Reader(['en'], gpu=True)
 
 # Wykrywanie tablic i rozpoznanie znaków z obrazu
 def detect_and_ocr(image_path):
     img = cv2.imread(image_path)
     #results = model(img)
-    result = model(img)[0]
+    result = model(img)[0] # device=0 oznacza GPU
 
     texts = []
     plate_idx = 0
@@ -144,14 +146,14 @@ def clean_text(text):
 def preprocess_plate(plate_img):
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
-
+    resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
     # Rozciąganie kontrastu (CLAHE)
     #clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(16,16))
     #enhanced = clahe.apply(gray)
 
     # Usuwanie szumu
     #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
-    blurred = cv2.bilateralFilter(gray,9,9,1.5)
+    blurred = cv2.bilateralFilter(resized,9,9,1.5)
 
     # Usuwanie szumu (morfologia, oczyszczenie)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
@@ -322,8 +324,8 @@ for img_file in images:
 
             '''center = (width // 2, height // 2)
             M = cv2.getRotationMatrix2D(center, 2, 1.0)
-            rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-            resized = cv2.resize(rotated, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)'''
+            rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)'''
+            resized = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
 
             ocr_result = reader.readtext(plate_img, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
             for res in ocr_result:
