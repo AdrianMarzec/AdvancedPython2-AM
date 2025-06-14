@@ -108,8 +108,8 @@ def detect_and_ocr(image_path):
             plate_img = cv2.filter2D(resized, -1, kernel)
 
         # Zapis wyciętej tablicy do Debugowania
-        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-        cv2.imwrite(debug_path, plate_img)
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+        cv2.imwrite(debug_path, plate_img)'''
 
         # Wstępne przetwarzanie obrazu tablicy
         preprocessed = preprocess_plate(plate_img)
@@ -122,9 +122,9 @@ def detect_and_ocr(image_path):
 
 
         # Zapis przetworzonej tablicy do Debugowania
-        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
         cv2.imwrite(debug_path, cropped)
-        plate_idx += 1
+        plate_idx += 1'''
         
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
@@ -335,7 +335,7 @@ for img_file in images:
     # --- --- --- --- ---
 
     # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
-    if not match_found and similar(ocr_text, gt_text) > 0.8:
+    if not match_found and similar(ocr_text, gt_text) > 0.7:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
             height, width = plate_img.shape[:2]
@@ -361,7 +361,6 @@ for img_file in images:
             else:
                 print(ocr_text,gt_text)
 
-        
     #print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
 
 
