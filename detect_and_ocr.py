@@ -121,17 +121,19 @@ def detect_and_ocr(image_path):
         cropped = preprocessed[bottom_margin:, left_margin:]
 
 
-        # Zapis przetworzonej tablicy do Debugowania
-        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
-        cv2.imwrite(debug_path, cropped)
-        plate_idx += 1'''
-        
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
 
         center = (width // 2, height // 2)
         M = cv2.getRotationMatrix2D(center, -1, 1.0)
         rotated = cv2.warpAffine(cropped, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+        # Zapis przetworzonej tablicy do Debugowania
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        cv2.imwrite(debug_path, cropped)
+        plate_idx += 1'''
+        
 
         # Zapis, by mieć możliwość ponownej próby na powiększonym obrazie później
         cropped_plates.append(cropped)
@@ -232,9 +234,11 @@ csv_path = "annotations.csv"
 
 # Oczekiwane numery tablic
 ground_truth = load_ground_truth(csv_path)
+for i, gt in enumerate(ground_truth):
+    gt = clean_text(gt)
 
-#image_folder = "testowe100"
-image_folder="photos"
+image_folder = "testowe100"
+#image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
 random.seed(42) 
 #42 - 92%
@@ -262,6 +266,7 @@ total = len(images)
 
 # Oczekiwane boxy tablic
 ground_truth_boxes = load_ground_truth_boxes(csv_path)
+detected_boxes_dict = dict()
 
 ious_per_image = []
 
@@ -274,7 +279,6 @@ for img_file in images:
     texts, detected_boxes, cropped_plates = detect_and_ocr(img_path)
     gt_text = ground_truth.get(img_file, "").upper()
     ocr_text = texts[0].upper() if texts else ""
-    gt_text = clean_text(gt_text)
     
     match_found = False
 
@@ -284,7 +288,6 @@ for img_file in images:
         candidate_clean[1:] == gt_text or \
         candidate_clean[:-1] == gt_text or \
         candidate_clean[1:-1] == gt_text:
-            correct_count += 1
             match_found = True
             ocr_text = candidate_clean  # do wypisania później
             break
@@ -294,7 +297,6 @@ for img_file in images:
             postcheck[1:] == gt_text or \
             postcheck[:-1] == gt_text or \
             postcheck[1:-1] == gt_text:
-                correct_count += 1
                 match_found = True
                 ocr_text = postcheck
                 break
@@ -304,7 +306,6 @@ for img_file in images:
             postcheck[1:] == gt_text or \
             postcheck[:-1] == gt_text or \
             postcheck[1:-1] == gt_text:
-                correct_count += 1
                 match_found = True
                 ocr_text = postcheck
                 break
@@ -319,23 +320,19 @@ for img_file in images:
                     best_match = candidate
 
             if min_distance < 0.2:
-                correct_count += 1
                 match_found = True
                 ocr_text = best_match
+                break
 
-    # --- LICZENIE IoU --- (wykryte a prawdziwe boxy)
-    gt_boxes_img = ground_truth_boxes.get(img_file, [])
-    for gt_box in gt_boxes_img:
-        max_iou = 0
-        for det_box in detected_boxes:
-            current_iou = iou(gt_box, det_box)
-            if current_iou > max_iou:
-                max_iou = current_iou
-        ious_per_image.append(max_iou)
-    # --- --- --- --- ---
+    if match_found:
+        correct_count += 1
+
+
+    detected_boxes_dict[img_file] = detected_boxes  # zapisanie boxa dla późniejszego IoU
+
 
     # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
-    if not match_found and similar(ocr_text, gt_text) > 0.7:
+    if not match_found: #and similar(ocr_text, gt_text) > 0.7:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
             height, width = plate_img.shape[:2]
@@ -345,18 +342,18 @@ for img_file in images:
             rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
             resized = cv2.resize(rotated, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
 
-            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
+            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')#,paragraph=True)
             for res in ocr_result:
                 text_resized = clean_text(res[1])
                 if text_resized == gt_text or \
                    text_resized[1:] == gt_text or \
                    text_resized[:-1] == gt_text or \
                    text_resized[1:-1] == gt_text:
-                    correct_count += 1
                     match_found = True
                     ocr_text = text_resized
                     break
             if match_found:
+                correct_count += 1
                 break
             else:
                 print(ocr_text,gt_text)
@@ -365,6 +362,19 @@ for img_file in images:
 
 
 end = time.time()
+
+# --- LICZENIE IoU --- (wykryte a prawdziwe boxy)
+for img_file in images:
+    gt_boxes_img = ground_truth_boxes.get(img_file, [])
+    det_boxes_img = detected_boxes_dict.get(img_file, [])
+
+    for gt_box in gt_boxes_img:
+        max_iou = 0
+        for det_box in det_boxes_img:
+            current_iou = iou(gt_box, det_box)
+            if current_iou > max_iou:
+                max_iou = current_iou
+        ious_per_image.append(max_iou)
 
 average_iou = sum(ious_per_image) / len(ious_per_image) if ious_per_image else 0
 print(f"\nŚrednia wartość IoU dla detekcji: {average_iou:.3f}")
