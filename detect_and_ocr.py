@@ -338,12 +338,12 @@ for img_file in images:
     if not match_found and similar(ocr_text, gt_text) > 0.8:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
-            #height, width = plate_img.shape[:2]
+            height, width = plate_img.shape[:2]
 
-            #center = (width // 2, height // 2)
-            #M = cv2.getRotationMatrix2D(center, 2, 1.0)
-            #rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-            resized = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+            center = (width // 2, height // 2)
+            M = cv2.getRotationMatrix2D(center, 2, 1.0)
+            rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            resized = cv2.resize(rotated, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
 
             ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
             for res in ocr_result:
@@ -358,7 +358,8 @@ for img_file in images:
                     break
             if match_found:
                 break
-            print(ocr_text,gt_text)
+            else:
+                print(ocr_text,gt_text)
 
         
     #print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
