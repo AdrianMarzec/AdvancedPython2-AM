@@ -64,7 +64,7 @@ def load_ground_truth(csv_path):
     return gt
 
 # Załadowanie modelu YOLO (najlepszy wytrenowany)
-model = YOLO('runs/detect/train/weights/best.pt')
+model = YOLO('license-plate-finetune-v1m.pt')
 model.to('cuda')  # Przenosi model na GPU
 
 
@@ -94,24 +94,23 @@ def detect_and_ocr(image_path):
         plate_img = img[y1:y2, x1:x2]
 
         # Zapis wyciętej tablicy do Debugowania
-        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-        cv2.imwrite(debug_path, plate_img)'''
+        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+        cv2.imwrite(debug_path, plate_img)
 
         # Wstępne przetwarzanie obrazu tablicy
         preprocessed = preprocess_plate(plate_img)
 
-
         # Dodatkowe przycięcie marginesów
         height, width = preprocessed.shape[:2]
         left_margin = int(width * 0.1)
-        bottom_margin = int(height*0.07)
+        bottom_margin = int(height*0.1)
         cropped = preprocessed[bottom_margin:, left_margin:]
 
 
         # Zapis przetworzonej tablicy do Debugowania
-        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
         cv2.imwrite(debug_path, cropped)
-        plate_idx += 1'''
+        plate_idx += 1
         
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
@@ -146,20 +145,21 @@ def clean_text(text):
 def preprocess_plate(plate_img):
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+    resized = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+
     # Rozciąganie kontrastu (CLAHE)
-    #clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(16,16))
-    #enhanced = clahe.apply(gray)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+    enhanced = clahe.apply(resized)
 
     # Usuwanie szumu
     #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
-    blurred = cv2.bilateralFilter(resized,9,9,1.5)
+    blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
 
     # Usuwanie szumu (morfologia, oczyszczenie)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
     clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
     #kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
-    #clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel2)
+    #clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, kernel2)
 
     # Progowanie Otsu
     _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -219,23 +219,23 @@ ground_truth = load_ground_truth(csv_path)
 #image_folder = "testowe100"
 image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
-random.seed(4748) 
-#42 - 67%
-#1410 - 68%
-#966 - 69%
-#4748 - 75%
-#3068191 - 74%
-#2137 - 73%
-#11 - 72%
-#13 - 71%
-#47 - 70%
-#25633 - 70%
-#0 - 71%
-#3 - 71%
-#666 - 67%
-#777 - 66%
-#420 - 67%
-#7 - 68%
+random.seed(42) 
+#42 - 90%
+#1410 - 81%
+#966 - 80%
+#4748 - 89%
+#3068191 - 83%
+#2137 - 82%
+#11 - 89%
+#13 - 85%
+#47 - 82%
+#25633 - 83%
+#0 - 83%
+#3 - 84%
+#666 - 82%
+#777 - 81%
+#420 - 85%
+#7 - 84%
 random.shuffle(images)
 images = images[:100]
 
@@ -320,14 +320,14 @@ for img_file in images:
     if not match_found and similar(ocr_text, gt_text) > 0.85:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
-            height, width = plate_img.shape[:2]
+            #height, width = plate_img.shape[:2]
 
-            '''center = (width // 2, height // 2)
-            M = cv2.getRotationMatrix2D(center, 2, 1.0)
-            rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)'''
+            #center = (width // 2, height // 2)
+            #M = cv2.getRotationMatrix2D(center, 2, 1.0)
+            #rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
             resized = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
 
-            ocr_result = reader.readtext(plate_img, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
+            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',paragraph=True)
             for res in ocr_result:
                 text_resized = clean_text(res[1])
                 if text_resized == gt_text or \
