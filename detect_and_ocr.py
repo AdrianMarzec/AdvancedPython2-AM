@@ -14,12 +14,14 @@ CHAR_SIMILARITY = {
     '0': ['O', 'Q'],
     'O': ['0', 'Q'],
     'Q': ['O', '0'],
-    #'1': ['I'],
-    #'I': ['1'],
+    '1': ['I'],
+    'I': ['1'],
     '6': ['G'],
     '8': ['B'],
     'B': ['8'],
-    'G': ['6']
+    'G': ['6'],
+    '5': ['S'],
+    'S': ['5']
 }
 
 # Funkcja IoU
@@ -75,7 +77,7 @@ reader = easyocr.Reader(['en'], gpu=True)
 def detect_and_ocr(image_path):
     img = cv2.imread(image_path)
     #results = model(img)
-    result = model(img)[0] # device=0 oznacza GPU
+    result = model(img)[0]
 
     texts = []
     plate_idx = 0
@@ -86,12 +88,24 @@ def detect_and_ocr(image_path):
     #for result in results:
     #   for box in result.boxes:
     for box in result.boxes:
+
         # Współrzędne wykrytej tablicy
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         detected_boxes.append([x1, y1, x2, y2])
 
         # Wycięcie tablicy z obrazu
         plate_img = img[y1:y2, x1:x2]
+
+        # Sprawdzenie rozdzielczości wyciętej tablicy
+        h, w = plate_img.shape[:2]
+        if h < 50 and w < 70:
+            # Delikatne wyostrzenie tylko dla małych tablic
+            resized = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+
+            kernel = np.array([[0, -1, 0],
+                               [-1, 5, -1],
+                               [0, -1, 0]])
+            plate_img = cv2.filter2D(resized, -1, kernel)
 
         # Zapis wyciętej tablicy do Debugowania
         debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
@@ -130,6 +144,7 @@ def detect_and_ocr(image_path):
                 text = clean_text(res[1])
                 texts.append(text)
 
+
     return texts, detected_boxes, cropped_plates
 
 
@@ -154,7 +169,7 @@ def preprocess_plate(plate_img):
     # Usuwanie szumu
     #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
     blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
-
+    
     # Usuwanie szumu (morfologia, oczyszczenie)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
     clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
@@ -168,8 +183,10 @@ def preprocess_plate(plate_img):
     #median = cv2.medianBlur(binary, 3)
     bilateral = cv2.bilateralFilter(binary, 15, 100, 125)
     inverted = cv2.bitwise_not(bilateral)
+    eroded = cv2.erode(inverted, kernel, iterations=1)
+    dilated = cv2.dilate(eroded, kernel, iterations=1)
     
-    return inverted
+    return dilated
 
 
 # Obliczanie podobieństwa tekstów
@@ -220,10 +237,11 @@ ground_truth = load_ground_truth(csv_path)
 image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
 random.seed(42) 
-#42 - 90%
+#42 - 92%
+#4748 - 90%
+#---
 #1410 - 81%
 #966 - 80%
-#4748 - 89%
 #3068191 - 83%
 #2137 - 82%
 #11 - 89%
@@ -317,7 +335,7 @@ for img_file in images:
     # --- --- --- --- ---
 
     # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
-    if not match_found and similar(ocr_text, gt_text) > 0.85:
+    if not match_found and similar(ocr_text, gt_text) > 0.8:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
             #height, width = plate_img.shape[:2]
