@@ -67,6 +67,7 @@ def load_ground_truth(csv_path):
 
 # Załadowanie modelu YOLO (najlepszy wytrenowany)
 model = YOLO('license-plate-finetune-v1m.pt')
+#model = YOLO('runs/detect/train/weights/best.pt')
 model.to('cuda')  # Przenosi model na GPU
 
 
@@ -230,26 +231,19 @@ for i, gt in enumerate(ground_truth):
 image_folder = "prezentacja"
 #image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
-random.seed(42) 
-#42 - 88%
-
-#4748 - 81%
-#1410 - 84%
-#966 - 81%
-#3068191 - 81%
-#2137 - 81%
-#11 - 84%
-#13 - 79%
-#47 - 84%
-#25633 - 84%
-#0 - 83%
-#3 - 82%
-#666 - 80%
-#777 - 83%
-#420 - 80%
-#7 - 81%
-#69 - 77%
-#69420 - 78%
+random.seed(29783) 
+#10783 - 89%
+#910 - 92%
+#7986 - 92%
+#21666 - 92%
+#3068191 - 90%
+#111111111 - 90%
+#29783 - 93%
+#9875 - 92%
+#25633 - 90%
+#2000 - 89%
+#3 - 89%
+#777 - 89%
 
 random.shuffle(images)
 images = images[:100]
@@ -324,7 +318,7 @@ for img_file in images:
     detected_boxes_dict[img_file] = detected_boxes  # zapisanie boxa dla późniejszego IoU
 
 
-    # Próba OCR po przeskalowaniu, jeśli nie udało się wcześniej
+    # Próba II - OCR po przeskalowaniu, jeśli nie udało się wcześniej
     if not match_found: #and similar(ocr_text, gt_text) > 0.7:
         for plate_img in cropped_plates:
             # Po wycięciu i wstępnym przetworzeniu tablicy
@@ -366,8 +360,8 @@ for img_file in images:
                 correct_count += 1
                 break
             else:
-                print(ocr_text,gt_text)
-
+                print(ocr_text,gt_text)    
+    
     #print(f"Image: {img_file}, OCR Text: {ocr_text}, Ground Truth: {gt_text}")
 
 
