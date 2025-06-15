@@ -104,8 +104,8 @@ def detect_and_ocr(image_path):
             plate_img = cv2.filter2D(resized, -1, kernel)
 
         # Zapis wyciętej tablicy do Debugowania
-        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-        cv2.imwrite(debug_path, plate_img)
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+        cv2.imwrite(debug_path, plate_img)'''
 
         # Wstępne przetwarzanie obrazu tablicy
         preprocessed = preprocess_plate(plate_img)
@@ -120,20 +120,21 @@ def detect_and_ocr(image_path):
 
         # Po wycięciu i wstępnym przetworzeniu tablicy
         height, width = cropped.shape[:2]
-
         center = (width // 2, height // 2)
         M = cv2.getRotationMatrix2D(center, -1, 1.0)
         rotated = cv2.warpAffine(cropped, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 
+        #smoothed = cv2.GaussianBlur(rotated, (5, 5), sigmaX=1)
+
         # Zapis przetworzonej tablicy do Debugowania
-        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
-        cv2.imwrite(debug_path, cropped)
-        plate_idx += 1
+        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        cv2.imwrite(debug_path, rotated)
+        plate_idx += 1'''
         
 
         # Zapis, by mieć możliwość ponownej próby na powiększonym obrazie później
-        cropped_plates.append(cropped)
+        cropped_plates.append(rotated)
 
         # Uruchomienie OCR
         ocr_result = reader.readtext(rotated, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
@@ -156,36 +157,6 @@ def clean_text(text):
 
 
 # Wstępne przetwarzanie obrazu tablicy dla lepszego OCR
-'''def preprocess_plate(plate_img):
-    # Konwersja do szarości
-    gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
-
-    # Rozciąganie kontrastu (CLAHE)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-    enhanced = clahe.apply(resized)
-
-    # Usuwanie szumu
-    #blurred = cv2.GaussianBlur(enhanced,(9,9),1)
-    blurred = cv2.bilateralFilter(enhanced,9,9,1.5)
-    
-    # Usuwanie szumu (morfologia, oczyszczenie)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
-    clean = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
-    #kernel2 = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
-    #clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, kernel2)
-
-    # Progowanie Otsu
-    _, binary = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Filtracja i odwrócenie
-    #median = cv2.medianBlur(binary, 3)
-    bilateral = cv2.bilateralFilter(binary, 15, 100, 125)
-    inverted = cv2.bitwise_not(bilateral)
-    eroded = cv2.erode(inverted, kernel, iterations=1)
-    dilated = cv2.dilate(eroded, kernel, iterations=1)
-    
-    return dilated'''
 def preprocess_plate(plate_img):
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
     #resized = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
@@ -196,6 +167,7 @@ def preprocess_plate(plate_img):
     # Filtr zachowujący krawędzie
     denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
 
+    # Usuwanie szumu (morfologia, oczyszczenie)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
     clean = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
 
@@ -205,7 +177,7 @@ def preprocess_plate(plate_img):
 
     eroded = cv2.erode(inverted, kernel, iterations=1)
     dilated = cv2.dilate(eroded, kernel, iterations=1)
-
+    
     return dilated
 
 # Obliczanie podobieństwa tekstów
@@ -221,10 +193,10 @@ def fuzzy_char_distance(a: str, b: str) -> float:
     mismatches = 0
     for ca, cb in zip(a, b):
         if ca != cb:
-            if cb not in CHAR_SIMILARITY.get(ca, []):
-                mismatches += 1
-            else:
+            if cb in CHAR_SIMILARITY.get(ca, []) or ca in CHAR_SIMILARITY.get(cb, []):
                 mismatches += 0.3  # podobny znak = mniejsza kara
+            else:
+                mismatches += 1
 
     return mismatches / len(a)  # niższa wartość = lepszy match
 
@@ -254,27 +226,31 @@ ground_truth = load_ground_truth(csv_path)
 for i, gt in enumerate(ground_truth):
     gt = clean_text(gt)
 
-image_folder = "testowe100"
+#image_folder = "testowe100"
+image_folder = "prezentacja"
 #image_folder="photos"
 images = [f for f in os.listdir(image_folder) if f.endswith('.jpg')]
 random.seed(42) 
-#42 - 92%
-#4748 - 90%
-#---
-#1410 - 81%
-#966 - 80%
-#3068191 - 83%
-#2137 - 82%
-#11 - 89%
-#13 - 85%
-#47 - 82%
-#25633 - 83%
+#42 - 88%
+
+#4748 - 81%
+#1410 - 84%
+#966 - 81%
+#3068191 - 81%
+#2137 - 81%
+#11 - 84%
+#13 - 79%
+#47 - 84%
+#25633 - 84%
 #0 - 83%
-#3 - 84%
-#666 - 82%
-#777 - 81%
-#420 - 85%
-#7 - 84%
+#3 - 82%
+#666 - 80%
+#777 - 83%
+#420 - 80%
+#7 - 81%
+#69 - 77%
+#69420 - 78%
+
 random.shuffle(images)
 images = images[:100]
 
@@ -359,7 +335,11 @@ for img_file in images:
             rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
             resized = cv2.resize(rotated, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
 
-            ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')#,paragraph=True)
+            # Pogrubienie liter
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            thickened = cv2.dilate(resized, kernel, iterations=1)
+
+            ocr_result = reader.readtext(thickened, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')#,paragraph=True)
             for res in ocr_result:
                 text_resized = clean_text(res[1])
                 if text_resized == gt_text or \
@@ -369,6 +349,19 @@ for img_file in images:
                     match_found = True
                     ocr_text = text_resized
                     break
+                else:
+                    min_distance = 1.0
+                    best_match = ""
+
+                    dist = fuzzy_char_distance(text_resized, gt_text)
+                    if dist < min_distance:
+                        min_distance = dist
+                        best_match = text_resized
+
+                    if min_distance < 0.2:
+                        match_found = True
+                        ocr_text = best_match
+                        break
             if match_found:
                 correct_count += 1
                 break
