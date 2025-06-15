@@ -76,7 +76,6 @@ reader = easyocr.Reader(['en'], gpu=True)
 # Wykrywanie tablic i rozpoznanie znaków z obrazu
 def detect_and_ocr(image_path):
     img = cv2.imread(image_path)
-    #results = model(img)
     result = model(img)[0]
 
     texts = []
@@ -84,9 +83,6 @@ def detect_and_ocr(image_path):
     detected_boxes = []
     cropped_plates = []
 
-    # Dwie pętle gdy jest więcej niż jedna tablica na jpg 
-    #for result in results:
-    #   for box in result.boxes:
     for box in result.boxes:
 
         # Współrzędne wykrytej tablicy
@@ -108,11 +104,12 @@ def detect_and_ocr(image_path):
             plate_img = cv2.filter2D(resized, -1, kernel)
 
         # Zapis wyciętej tablicy do Debugowania
-        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
-        cv2.imwrite(debug_path, plate_img)'''
+        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}START.jpg")
+        cv2.imwrite(debug_path, plate_img)
 
         # Wstępne przetwarzanie obrazu tablicy
         preprocessed = preprocess_plate(plate_img)
+        #preprocessed = plate_img
 
         # Dodatkowe przycięcie marginesów
         height, width = preprocessed.shape[:2]
@@ -130,9 +127,9 @@ def detect_and_ocr(image_path):
 
 
         # Zapis przetworzonej tablicy do Debugowania
-        '''debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
+        debug_path = os.path.join("debugOCR", f"{os.path.basename(image_path).split('.')[0]}_plate{plate_idx}.jpg")
         cv2.imwrite(debug_path, cropped)
-        plate_idx += 1'''
+        plate_idx += 1
         
 
         # Zapis, by mieć możliwość ponownej próby na powiększonym obrazie później
@@ -159,7 +156,7 @@ def clean_text(text):
 
 
 # Wstępne przetwarzanie obrazu tablicy dla lepszego OCR
-def preprocess_plate(plate_img):
+'''def preprocess_plate(plate_img):
     # Konwersja do szarości
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
@@ -188,8 +185,28 @@ def preprocess_plate(plate_img):
     eroded = cv2.erode(inverted, kernel, iterations=1)
     dilated = cv2.dilate(eroded, kernel, iterations=1)
     
-    return dilated
+    return dilated'''
+def preprocess_plate(plate_img):
+    gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
+    #resized = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
+    # Kontrast lokalny
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
+    enhanced = clahe.apply(gray)
 
+    # Filtr zachowujący krawędzie
+    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Maska do morfologii
+    clean = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel) # "Zamykanie dziur"
+
+    # Progowanie i odwrócenie (dla jasnych liter)
+    _, thresh = cv2.threshold(clean, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    inverted = cv2.bitwise_not(thresh)
+
+    eroded = cv2.erode(inverted, kernel, iterations=1)
+    dilated = cv2.dilate(eroded, kernel, iterations=1)
+
+    return dilated
 
 # Obliczanie podobieństwa tekstów
 def similar(a, b):
@@ -338,9 +355,9 @@ for img_file in images:
             height, width = plate_img.shape[:2]
 
             center = (width // 2, height // 2)
-            M = cv2.getRotationMatrix2D(center, 2, 1.0)
+            M = cv2.getRotationMatrix2D(center, -1, 1.0)
             rotated = cv2.warpAffine(plate_img, M, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-            resized = cv2.resize(rotated, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+            resized = cv2.resize(rotated, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
 
             ocr_result = reader.readtext(resized, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')#,paragraph=True)
             for res in ocr_result:
